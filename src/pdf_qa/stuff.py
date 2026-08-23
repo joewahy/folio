@@ -10,7 +10,7 @@ measured tradeoff.
 
 from __future__ import annotations
 
-from pdf_qa.agent import extraction
+from pdf_qa.agent import extraction as extract_text
 from pdf_qa.extraction import Page
 from pdf_qa.llm import call_llm
 
@@ -26,4 +26,4 @@ def ask(question: str, pages: list[Page]) -> str:
     messages: list[dict] = [{"role": "user", "content": page_text}]
 
     response = call_llm(messages, system=SYSTEM_PROMPT)
-    return extraction(response)
+    return extract_text(response)
