@@ -1,19 +1,18 @@
-""" "Stuff the whole PDF into context" mode -- no retrieval, no chunking.
+""" "Stuff the whole PDF into context" mode -- no retrieval, no chunking,
+no embeddings, no agent loop.
 
-TODO(you): implement this after the RAG path (agent.py) works, as a
-cost/quality comparison. Concatenate every page's text from
-extraction.extract_pages() into one big context block, send it to Claude
-in a single call_llm() call alongside the question, and return the
-answer. No search_pdf tool, no embeddings, no agent loop.
-
-Do not build this yet -- it's here as a placeholder so the CLI can
-eventually route to it via a --mode flag (see cli.py).
+Concatenates every page's text into one block, page numbers inline as
+[p. N] markers, and asks Claude the question in a single call_llm()
+call. Exists as a cost/quality comparison against the RAG path
+(agent.py) -- see the README's "RAG vs. stuff mode" section for the
+measured tradeoff.
 """
 
 from __future__ import annotations
+
+from pdf_qa.agent import extraction
 from pdf_qa.extraction import Page
 from pdf_qa.llm import call_llm
-from pdf_qa.agent import extraction
 
 SYSTEM_PROMPT = """
 Read the page_text's reference material before answering. The question to be answered is located last, after the reference material. Cite pages where answer was found in the answer.
