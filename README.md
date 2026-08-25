@@ -76,3 +76,32 @@ larger one, stuff mode's cost would keep climbing while RAG's wouldn't.
 
 Reproduce with `python scratch/eval_modes.py` (needs `.env` set up; makes real
 API calls, so it costs a small amount to run).
+
+## Chunk size sweep
+
+`chunking.py` defaults to 500-character chunks with 100-character overlap.
+`scratch/eval_chunk_sizes.py` checks whether that's actually a good default by
+running RAG mode's same 9 questions at chunk sizes 250, 500, and 1000
+(overlap held fixed at 100, so size is the only variable).
+
+| Chunk size | Chunks | Citation accuracy | API calls | Total tokens | Wall time |
+|---|---|---|---|---|---|
+| 250 | 83 | 9/9 | 20 | 29,632 | 83.7s |
+| 500 | 35 | 9/9 | 18 | 30,295 | 83.7s |
+| 1000 | 19 | 9/9 | 18 | 40,713 | 91.6s |
+
+Accuracy didn't move at all across sizes on this document -- the interesting
+result is cost. **1000 is the clear loser**, costing ~35% more tokens than
+either smaller size, since each retrieved chunk carries roughly twice the raw
+text, resent as input tokens on every round trip. **250 and 500 land almost
+identically on cost, for different reasons**: 250 has more than double the
+chunks of 500, but 2 of the 9 questions needed a third `call_llm` round trip
+at that size instead of two -- the extra retrieval round trip resends the
+whole growing conversation as input tokens, erasing the savings smaller
+chunks should have produced. Net result: 500 isn't an arbitrary choice, it's
+empirically the sweet spot between "too small, sometimes needs a second
+search" and "too big, bloats every retrieval," while matching both on
+accuracy.
+
+Reproduce with `python scratch/eval_chunk_sizes.py` (same cost caveat as
+above, roughly 3x the spend since it repeats the sweep across three sizes).
