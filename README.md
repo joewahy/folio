@@ -45,7 +45,17 @@ src/pdf_qa/
 ├── agent.py        the tool-use loop -- decides when to search, builds the final answer
 ├── stuff.py        whole-PDF-in-context mode: no retrieval, no chunking, no embeddings
 └── cli.py          `pdf-qa <pdf>` entry point (--mode rag | stuff)
+
+evals/
+├── test_agent.py        mocked test: agent.py's tool-use loop, incl. the fallback path
+├── test_stuff.py        mocked test: stuff.py's message-building
+├── eval_modes.py        real-API: RAG vs. stuff, cost/latency/accuracy (see below)
+├── eval_chunk_sizes.py  real-API: chunk-size sweep (see below)
+└── test_injection.py    real-API: prompt-injection resistance via poisoned PDFs
 ```
+
+`scratch/` also exists locally (gitignored, not published) for `sample.pdf`
+and quick one-off dev scripts that don't back any claim made here.
 
 ## Status
 
@@ -55,7 +65,7 @@ Both modes work end to end: `--mode rag` (default) and `--mode stuff`.
 
 `stuff.py` exists to answer a concrete question: is the retrieval step actually
 worth its complexity, or would just pasting the whole document into context do
-just as well? `scratch/eval_modes.py` runs both modes against the same 9
+just as well? `evals/eval_modes.py` runs both modes against the same 9
 hand-labeled questions over `scratch/sample.pdf` (a 12-page document), checking
 whether each answer cites the page the answer actually came from.
 
@@ -74,13 +84,13 @@ size per question; RAG's stays roughly flat, bounded by how many chunks it
 retrieves. On a 12-page document the gap is already meaningful; on a much
 larger one, stuff mode's cost would keep climbing while RAG's wouldn't.
 
-Reproduce with `python scratch/eval_modes.py` (needs `.env` set up; makes real
+Reproduce with `python evals/eval_modes.py` (needs `.env` set up; makes real
 API calls, so it costs a small amount to run).
 
 ## Chunk size sweep
 
 `chunking.py` defaults to 500-character chunks with 100-character overlap.
-`scratch/eval_chunk_sizes.py` checks whether that's actually a good default by
+`evals/eval_chunk_sizes.py` checks whether that's actually a good default by
 running RAG mode's same 9 questions at chunk sizes 250, 500, and 1000
 (overlap held fixed at 100, so size is the only variable).
 
@@ -103,5 +113,16 @@ empirically the sweet spot between "too small, sometimes needs a second
 search" and "too big, bloats every retrieval," while matching both on
 accuracy.
 
-Reproduce with `python scratch/eval_chunk_sizes.py` (same cost caveat as
+Reproduce with `python evals/eval_chunk_sizes.py` (same cost caveat as
 above, roughly 3x the spend since it repeats the sweep across three sizes).
+
+## Prompt injection
+
+Once a PDF's text sits in Claude's context, that content is untrusted input --
+`evals/test_injection.py` builds small poisoned PDFs (payload text embedded
+directly in the answer-relevant paragraph, so both modes are actually exposed
+to it, not just spared because retrieval never surfaced it) and checks whether
+either mode's system prompt can be overridden by instructions hidden in the
+document itself. See the script's own docstring for the payloads tested and
+why. Reproduce with `python evals/test_injection.py` (a handful of real API
+calls).
