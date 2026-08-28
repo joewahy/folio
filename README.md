@@ -51,7 +51,8 @@ evals/
 ├── test_stuff.py        mocked test: stuff.py's message-building
 ├── eval_modes.py        real-API: RAG vs. stuff, cost/latency/accuracy (see below)
 ├── eval_chunk_sizes.py  real-API: chunk-size sweep (see below)
-└── test_injection.py    real-API: prompt-injection resistance via poisoned PDFs
+├── test_injection.py    real-API: prompt-injection resistance via poisoned PDFs
+└── test_messy_pdfs.py   real-API: multi-column + scanned-PDF edge cases (see below)
 ```
 
 `scratch/` also exists locally (gitignored, not published) for `sample.pdf`
@@ -142,6 +143,34 @@ plain substring match can't tell apart from actual compliance. Fixed by only
 counting it as compromised when the trigger text appears *and* the real
 answer is absent -- the same category of heuristic mistake as the en-dash
 citation bug in the RAG-vs-stuff eval above.
+
+## Messier documents
+
+Every eval above uses the same one clean, well-structured `sample.pdf`.
+`evals/test_messy_pdfs.py` builds two synthetic PDFs with `fitz` to check
+whether that's actually representative: a multi-column layout, and a
+scanned-style (image-only, no text layer) page.
+
+**Multi-column: held up cleanly.** Two side-by-side paragraphs on different
+topics extracted in correct column order (the full left column, then the
+full right column) rather than interleaving line-by-line, and a question
+specific to one column got the right answer, correctly cited, in both
+modes.
+
+**Scanned/image-only: found and fixed a real crash.** `extraction.py`
+correctly returns an empty string for a page with no text layer, and
+`chunking.py` correctly skips empty-text pages -- but `cli.py`'s
+`build_index()` then handed that empty chunk list straight to
+`embeddings.embed_texts([])`, which OpenAI's API rejects with a raw `400
+BadRequestError`. Running `pdf-qa` on a fully-scanned PDF crashed with an
+unhandled API error instead of a clear message. Fixed with a guard in
+`build_index()` that raises `ValueError("No extractable text found ...")`
+before reaching the embeddings call -- this tool reads text directly from
+the PDF and does not do OCR, so a scanned document is a real, expected
+limitation, but it should fail clearly rather than crash confusingly.
+
+Reproduce with `python evals/test_messy_pdfs.py` (small real cost, for the
+multi-column half only -- the scanned half now fails fast with no API call).
 
 Reproduce with `python evals/test_injection.py` (a handful of real API
 calls).

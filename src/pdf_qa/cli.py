@@ -29,6 +29,17 @@ def build_index(pdf_path: str) -> tuple[list, np.ndarray]:
     """
     pages = extraction.extract_pages(pdf_path)
     chunks = chunking.chunk_pages(pages)
+    if not chunks:
+        # embed_texts([]) would otherwise reach OpenAI's API and fail
+        # with a raw 400 BadRequestError ("input cannot be an empty
+        # array") -- confirmed via evals/test_messy_pdfs.py against a
+        # scanned/image-only PDF. Fail here instead, with a message that
+        # actually explains what's wrong.
+        raise ValueError(
+            f"No extractable text found in {pdf_path!r}. This is likely a "
+            "scanned or image-only PDF -- pdf-qa reads text directly from "
+            "the PDF and does not do OCR."
+        )
     vectors = np.array(embeddings.embed_texts([chunk.text for chunk in chunks]))
     vectors = vectors / np.linalg.norm(vectors, axis=1, keepdims=True)
     return chunks, vectors
