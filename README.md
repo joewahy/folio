@@ -1,8 +1,8 @@
 # pdf-qa
 
 Ask questions about a PDF. Instead of a fixed retrieve-then-generate
-pipeline, Claude gets a `search_pdf` tool and decides for itself whether
-and how many times to call it before answering.
+pipeline, Claude gets a `search_pdf` tool and decides for itself how many
+times to call it before answering (it always searches at least once).
 
 ## Setup
 
@@ -16,7 +16,8 @@ Fill in `.env` with an [Anthropic API key](https://console.anthropic.com/setting
 ## Usage
 
 ```bash
-pdf-qa path/to/your.pdf
+pdf-qa path/to/your.pdf              # RAG mode (default): search over chunks
+pdf-qa path/to/your.pdf --mode stuff # whole PDF in context, no retrieval
 ```
 
 Drops you into a `>` prompt. Ask questions, `Ctrl+D` to quit.
@@ -26,12 +27,13 @@ Drops you into a `>` prompt. Ask questions, `Ctrl+D` to quit.
 1. `extraction.py` pulls text out of the PDF, page by page.
 2. `chunking.py` splits each page into overlapping chunks.
 3. `embeddings.py` embeds every chunk once, up front.
-4. You ask a question. Claude (`agent.py`) decides whether to call
-   `search_pdf` (`search.py`), which does a cosine-similarity lookup over
-   the chunk embeddings and returns the most relevant passages, page
-   numbers included.
-5. Claude answers, citing the pages it used. It can call `search_pdf`
-   more than once per question if it needs to.
+4. You ask a question. Claude always calls `search_pdf` (`search.py`) at
+   least once, which does a cosine-similarity lookup over the chunk
+   embeddings and returns the most relevant passages, page numbers
+   included.
+5. Claude answers, citing the pages it used -- or, if the results weren't
+   enough, decides to call `search_pdf` again (up to a cap) before
+   answering.
 
 ## Project layout
 
@@ -144,6 +146,9 @@ counting it as compromised when the trigger text appears *and* the real
 answer is absent -- the same category of heuristic mistake as the en-dash
 citation bug in the RAG-vs-stuff eval above.
 
+Reproduce with `python evals/test_injection.py` (a handful of real API
+calls).
+
 ## Messier documents
 
 Every eval above uses the same one clean, well-structured `sample.pdf`.
@@ -171,6 +176,3 @@ limitation, but it should fail clearly rather than crash confusingly.
 
 Reproduce with `python evals/test_messy_pdfs.py` (small real cost, for the
 multi-column half only -- the scanned half now fails fast with no API call).
-
-Reproduce with `python evals/test_injection.py` (a handful of real API
-calls).
