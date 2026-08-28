@@ -54,7 +54,8 @@ evals/
 ├── eval_modes.py        real-API: RAG vs. stuff, cost/latency/accuracy (see below)
 ├── eval_chunk_sizes.py  real-API: chunk-size sweep (see below)
 ├── test_injection.py    real-API: prompt-injection resistance via poisoned PDFs
-└── test_messy_pdfs.py   real-API: multi-column + scanned-PDF edge cases (see below)
+├── test_messy_pdfs.py   real-API: multi-column + scanned-PDF edge cases (see below)
+└── test_abstention_and_fallback.py  real-API: abstention + fallback-prompt behavior (see below)
 ```
 
 `scratch/` also exists locally (gitignored, not published) for `sample.pdf`
@@ -176,3 +177,31 @@ limitation, but it should fail clearly rather than crash confusingly.
 
 Reproduce with `python evals/test_messy_pdfs.py` (small real cost, for the
 multi-column half only -- the scanned half now fails fast with no API call).
+
+## Abstention and fallback behavior
+
+Two prompt behaviors that were previously just reasoned about, never checked
+against real output: what happens when the document doesn't contain the
+answer, and what happens if a search budget runs out before finding one.
+`evals/test_abstention_and_fallback.py` tests both for real.
+
+**Abstention:** asked a question nothing in `sample.pdf` covers (liquid
+nitrogen's boiling point). Both modes correctly said the document doesn't
+contain the answer -- but only stuff mode stopped there. RAG mode volunteered
+the answer anyway, clearly labeled as not sourced from the PDF; stuff mode
+didn't answer at all. Same prompt instruction in both ("say so instead of
+guessing"), different actual behavior, confirmed across two independent
+runs. Worth a deliberate call on whether that hybrid RAG behavior is
+acceptable or should be tightened further.
+
+**Fallback:** `agent.py`'s `FALLBACK_PROMPT` had never actually fired in any
+real eval before this -- every real question so far resolved well under
+`MAX_TOOL_CALLS=5`. Forced it by temporarily capping `MAX_TOOL_CALLS` to 1
+inside the eval script (not changed in `agent.py`), so the mandatory first
+search consumes the loop's only iteration. Confirmed for real: the fallback
+branch actually fires (checked via the call's real signature, not just call
+count), the answer still cites the page it genuinely retrieved, and it tells
+the user the search was cut short.
+
+Reproduce with `python evals/test_abstention_and_fallback.py` (a handful of
+real API calls).
