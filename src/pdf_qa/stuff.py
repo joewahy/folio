@@ -15,7 +15,7 @@ from pdf_qa.extraction import Page
 from pdf_qa.llm import call_llm
 
 SYSTEM_PROMPT = """
-Read the page_text's reference material before answering. The question to be answered is located last, after the reference material. Cite pages where answer was found in the answer.
+Read the reference material before answering. The question to be answered is located last, after the reference material. Cite pages where answer was found in the answer. If the reference material doesn't answer the question, say so instead of guessing.
 """
 
 def ask(question: str, pages: list[Page]) -> str:
