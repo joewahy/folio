@@ -29,11 +29,11 @@ MAX_TOOL_CALLS = 5
 # pages -- since search_pdf's results carry "[p. N]" markers, but nothing
 # forces Claude to repeat them in its answer unless told to.
 SYSTEM_PROMPT = """
-Always call search_pdf before answering. Use output from search_pdf to answer question. Cite pages where answer was found in the answer.
+Always call search_pdf before answering. Use output from search_pdf to answer question. Cite pages where answer was found in the answer. If the retrieved passages don't answer the question, say so instead of guessing.
 """
 
 FALLBACK_PROMPT = """
-Answer from whatever that already has been retrieved. Note that the answer may be incomplete since it ran out of search attempts. Skip the citation mandate.
+Answer using whatever was already retrieved above. Cite pages only for content that actually came from a search result, don't invent a citation. Tell the user the answer may be incomplete since search was cut short.
 """
 
 def extraction(call):
