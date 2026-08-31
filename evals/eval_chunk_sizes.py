@@ -1,7 +1,6 @@
 """Eval script: sweep chunking's chunk size (holding overlap fixed)
-against the same question set as eval_modes.py, to see whether chunk
-size actually moves RAG citation accuracy/cost/latency on
-scratch/sample.pdf.
+against the 40-question corpus (evals/corpus.py), to see whether chunk
+size actually moves RAG citation accuracy, cost, or latency.
 
 Not part of the pdf_qa package -- a standalone script, not pytest-
 discoverable. Tracked (unlike scratch/, which is gitignored) because
@@ -12,19 +11,20 @@ irrelevant to it (see eval_modes.py for the RAG-vs-stuff comparison).
 
 Deliberately does NOT touch chunking.py: chunk_pages() hardcodes
 size=500, overlap=100 as local variables, not parameters, and making
-that configurable is a chunking-algorithm decision left to you (see
-chunking.py's own docstring). chunk_pages_sized() below is a
-parameterized copy of the exact same sliding-window logic, kept local
-to this one experiment instead of changing the real implementation.
+that configurable is a chunking-algorithm decision left to the project
+owner (see chunking.py's own docstring). chunk_pages_sized() below is a
+parameterized copy of the exact same sliding-window logic, kept local to
+this one experiment instead of changing the real implementation.
 
-Overlap is held fixed at 100 across every size in the sweep -- chunk
-size is the only variable under test, per normal controlled-comparison
-practice. Sweeping overlap too would be a second, separate experiment.
+Overlap is held fixed at 100 across every size -- chunk size is the only
+variable under test, per normal controlled-comparison practice. Sweeping
+overlap too would be a second, separate experiment.
 
-Costs real money, more than eval_modes.py's single run: builds a full
-RAG index (embeddings) and runs all 9 questions through agent.ask() for
-EACH size -- 3 sizes x 9 questions x ~2 calls/question = ~54 real Claude
-calls, plus 3 embedding calls (one per size, batched).
+Costs real money, and more of it than eval_modes.py: it builds a fresh
+RAG index (embeddings) and runs all 40 questions through agent.ask() for
+EACH size -- 3 sizes x 40 questions x ~2 calls/question is on the order
+of 240 real Claude calls, plus 3 x 4 embedding calls. Set
+ANTHROPIC_MODEL=claude-haiku-4-5 in .env first.
 
 Usage:
     python evals/eval_chunk_sizes.py
@@ -33,15 +33,21 @@ Usage:
 from __future__ import annotations
 
 import numpy as np
+from corpus import DOCUMENTS, require_pdfs
 from dotenv import load_dotenv
+from eval_modes import (
+    add_into,
+    cited_pages,
+    make_tracking_call_llm,
+    new_stats,
+    summary_line,
+)
 
 import pdf_qa.agent as agent
-from eval_modes import QUESTIONS, cited_pages, make_tracking_call_llm, new_stats
 from pdf_qa import embeddings
 from pdf_qa.chunking import Chunk
 from pdf_qa.extraction import Page, extract_pages
 
-PDF_PATH = "scratch/sample.pdf"
 SIZES = [250, 500, 1000]
 OVERLAP = 100  # held fixed -- only `size` is swept
 
@@ -84,40 +90,47 @@ def build_index_sized(pages: list[Page], size: int, overlap: int):
     return chunks, vectors
 
 
-def run_size(size: int, pages: list[Page]) -> None:
-    chunks, vectors = build_index_sized(pages, size, OVERLAP)
-    print(f"\n=== chunk size {size} (overlap {OVERLAP}, {len(chunks)} chunks) ===")
+def run_size(size: int, pages_by_doc: dict[str, list[Page]]) -> None:
+    print(f"\n{'=' * 70}\n=== chunk size {size} (overlap {OVERLAP}) ===\n{'=' * 70}")
+    grand = new_stats()
+    grand_hits = grand_asked = 0
 
-    totals = new_stats()
-    hits = 0
+    for doc in DOCUMENTS:
+        chunks, vectors = build_index_sized(pages_by_doc[doc.name], size, OVERLAP)
+        doc_totals = new_stats()
+        doc_hits = 0
+        print(f"\n--- {doc.name}  ({len(chunks)} chunks) ---")
 
-    for question, expected_page in QUESTIONS:
-        stats = new_stats()
-        agent.call_llm = make_tracking_call_llm(stats)
+        for question, expected_pages in doc.questions:
+            stats = new_stats()
+            agent.call_llm = make_tracking_call_llm(stats)
 
-        answer = agent.ask(question, chunks, vectors)
+            answer = agent.ask(question, chunks, vectors)
 
-        ok = expected_page in cited_pages(answer)
-        hits += ok
-        for key in totals:
-            totals[key] += stats[key]
+            ok = bool(expected_pages & cited_pages(answer))
+            doc_hits += ok
+            add_into(doc_totals, stats)
 
-        print(
-            f"[{'OK  ' if ok else 'MISS'}] expected p.{expected_page:<3} "
-            f"{stats['calls']} call(s), {stats['input_tokens']:>6}in/{stats['output_tokens']:>4}out tok, "
-            f"{stats['elapsed']:5.1f}s -- {question}"
-        )
+            want = ",".join(str(p) for p in sorted(expected_pages))
+            print(
+                f"[{'OK  ' if ok else 'MISS'}] want p.{want:<6} "
+                f"{stats['calls']} call(s), {stats['input_tokens']:>7}in/{stats['output_tokens']:>4}out tok, "
+                f"{stats['elapsed']:5.1f}s -- {question}"
+            )
+            print(f"       -> {' '.join(answer.split())}")
 
-    print(
-        f"\nsize {size}: {hits}/{len(QUESTIONS)} correctly cited. "
-        f"Totals: {totals['calls']} calls, {totals['input_tokens']} in / "
-        f"{totals['output_tokens']} out tokens, {totals['elapsed']:.1f}s"
-    )
+        print(summary_line(f"  {doc.name}", doc_hits, len(doc.questions), doc_totals))
+        add_into(grand, doc_totals)
+        grand_hits += doc_hits
+        grand_asked += len(doc.questions)
+
+    print("\n" + summary_line(f"size {size} TOTAL", grand_hits, grand_asked, grand))
 
 
 if __name__ == "__main__":
     load_dotenv()
-    pages = extract_pages(PDF_PATH)
+    require_pdfs()
+    pages_by_doc = {doc.name: extract_pages(doc.path) for doc in DOCUMENTS}
 
     for size in SIZES:
-        run_size(size, pages)
+        run_size(size, pages_by_doc)

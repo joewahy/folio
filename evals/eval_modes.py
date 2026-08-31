@@ -1,27 +1,27 @@
 """Eval script: compare RAG mode (agent.ask) against stuff mode
-(stuff.ask) on cost, latency, and citation accuracy across a small,
-hand-labeled question set tied to scratch/sample.pdf's actual content.
+(stuff.ask) on cost, latency, and citation accuracy across the 40-
+question corpus (evals/corpus.py) -- four documents of different shape,
+ten hand-labeled questions each.
 
 Not part of the pdf_qa package -- a standalone script, not pytest-
 discoverable. Tracked (unlike scratch/, which is gitignored) because
 this is what the README's RAG-vs-stuff numbers actually come from.
 
-Costs real money: it builds the RAG index (OpenAI embeddings) once, then
-runs every question through both modes for real against the Claude API
--- unlike test_agent.py/test_stuff.py, nothing here is mocked. RAG mode
-in particular can make several call_llm round trips per question (the
-tool-use loop), so this adds up faster than a single question would.
-Consider setting ANTHROPIC_MODEL=claude-sonnet-5 (or claude-haiku-4-5)
-in .env before running this -- llm.py defaults to claude-opus-5, which
-is the most expensive option and probably overkill for an eval loop.
+Costs real money: it builds a RAG index (OpenAI embeddings) for each of
+the four PDFs once, then runs every question through both modes for real
+against the Claude API -- nothing here is mocked. RAG mode can make
+several call_llm round trips per question (the tool-use loop), and stuff
+mode resends the whole document every question, so the 76-page NIST PDF
+in particular is token-heavy in stuff mode. Set
+ANTHROPIC_MODEL=claude-haiku-4-5 (or claude-sonnet-5) in .env before
+running -- llm.py defaults to claude-opus-5, overkill for an eval loop.
 
-"Accuracy" here is a cheap heuristic, not a rigorous grader: did the
-expected page number show up somewhere in the answer's citations, in
-either "p. N"/"pp. N-M" or prose "page N" form (range-aware, since a
-real stuff-mode answer cited "[p. 5-6]" for a quote spanning a page
-break). It'll catch a mode citing the wrong page or no page at all, but
-it says nothing about whether the prose itself is actually correct --
-read the printed answers, don't just trust the OK/MISS column.
+"Accuracy" here is a cheap heuristic, not a rigorous grader: did any of
+a question's labeled pages show up in the answer's citations, in "p. N"/
+"pp. N-M" or prose "page N" form (range-aware). It catches a mode citing
+the wrong page or no page at all, but says nothing about whether the
+prose itself is correct -- read the printed answers, don't just trust
+the OK/MISS column.
 
 Usage:
     python evals/eval_modes.py
@@ -32,6 +32,7 @@ from __future__ import annotations
 import re
 import time
 
+from corpus import DOCUMENTS, require_pdfs
 from dotenv import load_dotenv
 
 import pdf_qa.agent as agent
@@ -39,22 +40,6 @@ import pdf_qa.stuff as stuff
 from pdf_qa.cli import build_index
 from pdf_qa.extraction import extract_pages
 from pdf_qa.llm import call_llm as real_call_llm
-
-PDF_PATH = "scratch/sample.pdf"
-
-# (question, expected page) -- picked against sample.pdf's actual text,
-# one per major section of the review sheet.
-QUESTIONS = [
-    ("What is functional decomposition?", 1),
-    ("What is an abstract data type (ADT)?", 2),
-    ("What is abstraction in OOP?", 3),
-    ("Why would you want to use a Set instead of a List?", 6),
-    ("What are the two types of Sets, and how do they differ?", 6),
-    ("How does .equals() typically check whether two objects are equal?", 9),
-    ("Which classes implement the Map interface?", 10),
-    ("Why should exceptions be thrown as early as possible?", 10),
-    ("What is encapsulation and how do we achieve it in Java?", 8),
-]
 
 # Claude sometimes writes ranges with a typographic en/em dash ("p. 5-6")
 # rather than a plain hyphen -- matters, since matching only "-" silently
@@ -91,44 +76,78 @@ def make_tracking_call_llm(stats: dict):
     return tracking_call_llm
 
 
-def run_mode(name: str, ask_fn) -> None:
-    print(f"\n=== {name} ===")
-    totals = new_stats()
-    hits = 0
+def add_into(totals: dict, stats: dict) -> None:
+    for key in totals:
+        totals[key] += stats[key]
 
-    for question, expected_page in QUESTIONS:
-        stats = new_stats()
-        # Patching both is harmless -- only the one this mode actually
-        # calls does anything, and it keeps this loop mode-agnostic.
-        agent.call_llm = make_tracking_call_llm(stats)
-        stuff.call_llm = make_tracking_call_llm(stats)
 
-        answer = ask_fn(question)
-
-        ok = expected_page in cited_pages(answer)
-        hits += ok
-        for key in totals:
-            totals[key] += stats[key]
-
-        print(
-            f"[{'OK  ' if ok else 'MISS'}] expected p.{expected_page:<3} "
-            f"{stats['calls']} call(s), {stats['input_tokens']:>6}in/{stats['output_tokens']:>4}out tok, "
-            f"{stats['elapsed']:5.1f}s -- {question}"
-        )
-
-    print(
-        f"\n{name}: {hits}/{len(QUESTIONS)} correctly cited. "
-        f"Totals: {totals['calls']} calls, {totals['input_tokens']} in / "
+def summary_line(label: str, hits: int, asked: int, totals: dict) -> str:
+    return (
+        f"{label}: {hits}/{asked} correctly cited. "
+        f"{totals['calls']} calls, {totals['input_tokens']} in / "
         f"{totals['output_tokens']} out tokens, {totals['elapsed']:.1f}s"
     )
 
 
+def run_mode(name: str, ask_for) -> None:
+    """ask_for(doc) -> (question -> answer) for one document."""
+    print(f"\n{'=' * 70}\n=== {name} ===\n{'=' * 70}")
+    grand = new_stats()
+    grand_hits = grand_asked = 0
+
+    for doc in DOCUMENTS:
+        ask_fn = ask_for(doc)
+        doc_totals = new_stats()
+        doc_hits = 0
+        print(f"\n--- {doc.name}  ({doc.shape}) ---")
+
+        for question, expected_pages in doc.questions:
+            stats = new_stats()
+            agent.call_llm = make_tracking_call_llm(stats)
+            stuff.call_llm = make_tracking_call_llm(stats)
+
+            answer = ask_fn(question)
+
+            ok = bool(expected_pages & cited_pages(answer))
+            doc_hits += ok
+            add_into(doc_totals, stats)
+
+            want = ",".join(str(p) for p in sorted(expected_pages))
+            print(
+                f"[{'OK  ' if ok else 'MISS'}] want p.{want:<6} "
+                f"{stats['calls']} call(s), {stats['input_tokens']:>7}in/{stats['output_tokens']:>4}out tok, "
+                f"{stats['elapsed']:5.1f}s -- {question}"
+            )
+            # Print the answer too: OK/MISS is a substring heuristic and has
+            # been wrong in both directions before (the injection-substring
+            # and en-dash bugs in the README) -- the column is not the eval.
+            print(f"       -> {' '.join(answer.split())}")
+
+        print(summary_line(f"  {doc.name}", doc_hits, len(doc.questions), doc_totals))
+        add_into(grand, doc_totals)
+        grand_hits += doc_hits
+        grand_asked += len(doc.questions)
+
+    print("\n" + summary_line(f"{name} TOTAL", grand_hits, grand_asked, grand))
+
+
 if __name__ == "__main__":
     load_dotenv()
+    require_pdfs()
 
-    print(f"Indexing {PDF_PATH} for RAG mode...")
-    chunks, vectors = build_index(PDF_PATH)
-    pages = extract_pages(PDF_PATH)
+    print("Building RAG indexes (OpenAI embeddings, once per document)...")
+    indexes = {}
+    pages = {}
+    for doc in DOCUMENTS:
+        print(f"  {doc.name} ...")
+        indexes[doc.name] = build_index(doc.path)
+        pages[doc.name] = extract_pages(doc.path)
 
-    run_mode("RAG", lambda q: agent.ask(q, chunks, vectors))
-    run_mode("STUFF", lambda q: stuff.ask(q, pages))
+    run_mode(
+        "RAG",
+        lambda doc: (lambda q: agent.ask(q, *indexes[doc.name])),
+    )
+    run_mode(
+        "STUFF",
+        lambda doc: (lambda q: stuff.ask(q, pages[doc.name])),
+    )

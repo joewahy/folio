@@ -49,76 +49,136 @@ src/pdf_qa/
 └── cli.py          `pdf-qa <pdf>` entry point (--mode rag | stuff)
 
 evals/
+├── corpus.py            the 40-question set: 4 documents x 10 questions, each labeled with its answer page(s)
+├── corpus/              the 4 eval PDFs, build_corpus.py that regenerates 3 of them, and SOURCES.md
 ├── test_agent.py        mocked test: agent.py's tool-use loop, incl. the fallback path
 ├── test_stuff.py        mocked test: stuff.py's message-building
-├── eval_modes.py        real-API: RAG vs. stuff, cost/latency/accuracy (see below)
-├── eval_chunk_sizes.py  real-API: chunk-size sweep (see below)
+├── eval_modes.py        real-API: RAG vs. stuff over the corpus, cost/latency/accuracy (see below)
+├── eval_chunk_sizes.py  real-API: chunk-size sweep over the corpus (see below)
 ├── test_injection.py    real-API: prompt-injection resistance via poisoned PDFs
 ├── test_messy_pdfs.py   real-API: multi-column + scanned-PDF edge cases (see below)
 └── test_abstention_and_fallback.py  real-API: abstention + fallback-prompt behavior (see below)
 ```
 
 `scratch/` also exists locally (gitignored, not published) for `sample.pdf`
-and quick one-off dev scripts that don't back any claim made here.
+(still used by the abstention eval) and quick one-off dev scripts that don't
+back any claim made here.
 
 ## Status
 
 Both modes work end to end: `--mode rag` (default) and `--mode stuff`.
 
+## The eval corpus
+
+Every measured claim below runs against `evals/corpus.py`: **40 hand-labeled
+questions, 10 each over 4 deliberately different documents.** The spread is the
+point -- each document stresses a different part of the extract -> chunk ->
+retrieve -> cite pipeline:
+
+| Document | Kind | Pages | Register |
+|---|---|---|---|
+| `notes_primer.pdf` | synthetic study notes | 10 | dense informal prose, one topic per page |
+| `thermostat_manual.pdf` | synthetic product manual | 10 | imperative steps, spec + troubleshooting tables |
+| `apache_license_2.0.pdf` | real license text, typeset | 6 | legal clauses, defined terms |
+| `nist_sp800-63-3.pdf` | real published PDF (NIST standard) | 76 | normative "SHALL/SHOULD", deep nesting, real extraction quirks |
+
+Two are generated from text in the repo (`evals/corpus/build_corpus.py`); two
+carry real third-party text (see `evals/corpus/SOURCES.md` for provenance and
+licensing). Each question is labeled with the PDF sheet number(s) where the
+answer lives, and "accuracy" is the same cheap heuristic throughout: did any
+labeled page turn up in the answer's citations. It catches "cited the wrong
+page" / "cited nothing"; it says nothing about whether the prose is right, so
+the eval scripts print every answer.
+
+**All numbers below are `claude-haiku-4-5`** (`ANTHROPIC_MODEL=claude-haiku-4-5`),
+picked to keep the eval cheap to re-run. A stronger model would likely lift the
+accuracy figures.
+
 ## RAG vs. stuff mode
 
 `stuff.py` exists to answer a concrete question: is the retrieval step actually
 worth its complexity, or would just pasting the whole document into context do
-just as well? `evals/eval_modes.py` runs both modes against the same 9
-hand-labeled questions over `scratch/sample.pdf` (a 12-page document), checking
-whether each answer cites the page the answer actually came from.
+just as well? `evals/eval_modes.py` runs both modes over all 40 questions.
 
-| | RAG | Stuff |
-|---|---|---|
-| Citation accuracy | 9/9 | 9/9 |
-| API calls | 18 (2/question) | 9 (1/question) |
-| Total tokens | 23,032 (19,271 in / 3,761 out) | 42,264 (39,949 in / 2,315 out) |
-| Wall time | 54.3s | 32.9s |
+| Document | RAG cites | Stuff cites | RAG tokens | Stuff tokens |
+|---|---|---|---|---|
+| notes_primer (10 pp) | 10/10 | 10/10 | 23.7k | 22.6k |
+| thermostat_manual (10 pp) | 9/10 | 10/10 | 21.3k | 20.4k |
+| apache_license_2.0 (6 pp) | 10/10 | 10/10 | 25.0k | 26.2k |
+| nist_sp800-63-3 (76 pp) | 6/10 | 3/10 | 27.2k | **382.5k** |
+| **Total** | **35/40** | **33/40** | **97.2k** | **451.7k** |
 
-On this document, accuracy is a tie. The real tradeoff is cost vs. latency:
-RAG uses **~55% of the tokens** stuff mode does, at the cost of **~1.65x the
-wall-clock time** (two API round trips per question -- a search call, then an
-answer call -- instead of one). Stuff mode's token cost scales with document
-size per question; RAG's stays roughly flat, bounded by how many chunks it
-retrieves. On a 12-page document the gap is already meaningful; on a much
-larger one, stuff mode's cost would keep climbing while RAG's wouldn't.
+RAG: 84 API calls, 136.2s wall. Stuff: 40 API calls, 93.1s wall.
 
-Reproduce with `python evals/eval_modes.py` (needs `.env` set up; makes real
-API calls, so it costs a small amount to run).
+**On the three small documents the retrieval step buys almost nothing** -- RAG
+and stuff land within a few percent on tokens (70.0k vs 69.2k combined) and
+cite about equally well (RAG 29/30, stuff 30/30). The two round trips per
+question just make RAG slower.
+
+**On the 76-page NIST document the gap is the whole story.** Stuff mode resends
+the entire document for every one of its 10 questions -- **382k input tokens**
+against RAG's 27k, a ~14x difference that is the entire reason RAG's total is
+about a fifth of stuff's. This is the "stuff mode's cost scales with document
+size" claim, now measured rather than asserted from a 12-page sample.
+
+**Accuracy on the NIST doc dropped for both, and reading the answers (not the
+OK/MISS column) is what separated the two causes:**
+
+- *Stuff's 3/10 is mostly a scoring artifact.* The real PDF has its own page
+  numbers -- front matter in roman numerals, body restarting at "1" -- that
+  don't line up with the PDF sheet index the pipeline cites as `[p. N]`. With
+  the whole document in context, the model cites *the document's* numbering
+  ("page 3", "page 13") for content that is genuinely there, just on PDF sheets
+  16 and 26. The heuristic can't tell that from a wrong citation.
+- *RAG's 6/10 misses are more real.* Retrieval sometimes surfaced a different
+  true passage than the labeled one (the Executive Summary's definition of
+  "digital identity" instead of the Introduction's). But RAG's citations stay
+  pinned to one numbering system, because each retrieved chunk reaches the
+  model carrying only its `[p. N]` marker, stripped of the surrounding page
+  furniture.
+
+So on a messy real document stuff mode's citations turn *ambiguous* (two
+numbering schemes visible at once) while RAG's stay anchored -- a reliability
+point that lands on the same side as the cost one. Same category of lesson as
+the en-dash and injection-substring bugs further down: the OK/MISS number is
+only as trustworthy as the thing it's compared against.
+
+Reproduce with `ANTHROPIC_MODEL=claude-haiku-4-5 python evals/eval_modes.py`
+(needs `.env` set up; makes real API calls, so it costs a small amount to run --
+mostly the NIST doc in stuff mode).
 
 ## Chunk size sweep
 
 `chunking.py` defaults to 500-character chunks with 100-character overlap.
-`evals/eval_chunk_sizes.py` checks whether that's actually a good default by
-running RAG mode's same 9 questions at chunk sizes 250, 500, and 1000
-(overlap held fixed at 100, so size is the only variable).
+`evals/eval_chunk_sizes.py` checks whether that's a good default by running RAG
+mode's 40 corpus questions at chunk sizes 250, 500, and 1000 (overlap held
+fixed at 100, so size is the only variable).
 
-| Chunk size | Chunks | Citation accuracy | API calls | Total tokens | Wall time |
+| Chunk size | Total chunks | Citation accuracy | API calls | Total tokens | Wall time |
 |---|---|---|---|---|---|
-| 250 | 83 | 9/9 | 20 | 29,632 | 83.7s |
-| 500 | 35 | 9/9 | 18 | 30,295 | 83.7s |
-| 1000 | 19 | 9/9 | 18 | 40,713 | 91.6s |
+| 250 | 1,170 | 37/40 | 94 | 102.9k | 132.4s |
+| 500 | 470 | 36/40 | 86 | 100.4k | 127.9s |
+| 1000 | 240 | 37/40 | 81 | 110.4k | 135.5s |
 
-Accuracy didn't move at all across sizes on this document -- the interesting
-result is cost. **1000 is the clear loser**, costing ~35% more tokens than
-either smaller size, since each retrieved chunk carries roughly twice the raw
-text, resent as input tokens on every round trip. **250 and 500 land almost
-identically on cost, for different reasons**: 250 has more than double the
-chunks of 500, but 2 of the 9 questions needed a third `call_llm` round trip
-at that size instead of two -- the extra retrieval round trip resends the
-whole growing conversation as input tokens, erasing the savings smaller
-chunks should have produced. Net result: 500 isn't an arbitrary choice, it's
-empirically the sweet spot between "too small, sometimes needs a second
-search" and "too big, bloats every retrieval," while matching both on
-accuracy.
+**Accuracy barely moves** (36-37/40). The three clean documents sit at 29-30/30
+at every size; all the wobble is the NIST doc bouncing between 6/10 and 8/10
+run to run, which is model nondeterminism plus the two-numbering-systems
+ambiguity from the section above -- not a chunk-size effect.
 
-Reproduce with `python evals/eval_chunk_sizes.py` (same cost caveat as
-above, roughly 3x the spend since it repeats the sweep across three sizes).
+**Cost still separates them, and 1000 still loses.** 1000 costs ~10% more
+tokens than 500 *despite making the fewest API calls* (81): each retrieved
+chunk carries roughly twice the raw text and is resent on every round trip,
+which outweighs the round trips saved. 250 and 500 land within a few percent
+of each other on tokens, but 500 makes fewer calls (86 vs 94) -- at 250 the smaller
+chunks more often trigger an extra search before the model has enough to
+answer. So 500 stays the defensible default: lowest-or-near-lowest tokens,
+fewer round trips than 250, no accuracy penalty -- now checked across 40
+questions and 4 document shapes instead of 9 questions on one.
+
+Reproduce with
+`ANTHROPIC_MODEL=claude-haiku-4-5 python evals/eval_chunk_sizes.py` (same cost
+caveat as above, roughly 3x the spend since it repeats the sweep across three
+sizes).
 
 ## Prompt injection
 
@@ -152,9 +212,9 @@ calls).
 
 ## Messier documents
 
-Every eval above uses the same one clean, well-structured `sample.pdf`.
-`evals/test_messy_pdfs.py` builds two synthetic PDFs with `fitz` to check
-whether that's actually representative: a multi-column layout, and a
+The corpus above spans four document shapes, but all four are born-digital
+PDFs with a clean text layer. `evals/test_messy_pdfs.py` builds two synthetic
+PDFs with `fitz` to probe the layouts that aren't: a multi-column page, and a
 scanned-style (image-only, no text layer) page.
 
 **Multi-column: held up cleanly.** Two side-by-side paragraphs on different
