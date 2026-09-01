@@ -22,6 +22,20 @@ pdf-qa path/to/your.pdf --mode stuff # whole PDF in context, no retrieval
 
 Drops you into a `>` prompt. Ask questions, `Ctrl+D` to quit.
 
+### Web UI
+
+```bash
+pip install -e ".[ui]"
+streamlit run streamlit_app.py
+```
+
+Upload a PDF, pick a mode, ask questions in a chat box. It's a thin wrapper --
+`streamlit_app.py` calls the same `agent.ask()` / `stuff.ask()` the CLI does,
+with the index cached (`@st.cache_resource`) so a PDF is only extracted and
+embedded once no matter how many questions follow. To deploy on Streamlit
+Community Cloud, point it at `streamlit_app.py` and put `ANTHROPIC_API_KEY` /
+`OPENAI_API_KEY` (and optional `ANTHROPIC_MODEL`) in the app's Secrets.
+
 ## How it works
 
 1. `extraction.py` pulls text out of the PDF, page by page.
@@ -38,6 +52,8 @@ Drops you into a `>` prompt. Ask questions, `Ctrl+D` to quit.
 ## Project layout
 
 ```
+streamlit_app.py    thin Streamlit UI over agent.ask()/stuff.ask() (see "Web UI" above)
+
 src/pdf_qa/
 ├── extraction.py   PDF -> per-page text (PyMuPDF)
 ├── chunking.py     page text -> overlapping chunks
