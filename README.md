@@ -4,6 +4,24 @@ Ask questions about a PDF. Instead of a fixed retrieve-then-generate
 pipeline, Claude gets a `search_pdf` tool and decides for itself how many
 times to call it before answering (it always searches at least once).
 
+## Highlights
+
+- **Agentic retrieval, not a fixed pipeline** -- the LLM gets a `search_pdf`
+  tool and decides when and how many times to call it before answering
+  ([How it works](#how-it-works)).
+- **RAG vs. long-context, measured** -- across a 40-question, 4-document-type
+  eval set, agentic retrieval used ~4.6x fewer tokens (14x on a 76-page
+  document) at equal citation accuracy ([RAG vs. stuff mode](#rag-vs-stuff-mode)).
+- **Chunk size picked from a sweep, not guessed** -- 500-char windows checked
+  against 250 and 1000 on cost, latency, and accuracy
+  ([Chunk size sweep](#chunk-size-sweep)).
+- **Evaluation methodology taken seriously** -- three false-result bugs found
+  and fixed in the eval harness itself, by reading model outputs instead of
+  trusting the pass/fail column ([Prompt injection](#prompt-injection),
+  [RAG vs. stuff mode](#rag-vs-stuff-mode)).
+- **Raw Anthropic + OpenAI SDKs** -- NumPy cosine-similarity index, no
+  LangChain/LlamaIndex, no hosted vector DB.
+
 ## Setup
 
 ```bash
