@@ -77,7 +77,7 @@ def stuff_pages(pdf_sha: str, _pdf_bytes: bytes):
 
 
 st.set_page_config(page_title="pdf-qa", page_icon="📄", layout="centered")
-st.title("📄 pdf-qa")
+st.title("pdf-qa")
 st.caption(
     "Ask questions about a PDF. **RAG** searches over chunks; **stuff** puts the "
     "whole document in context. Answers cite the page they came from."
@@ -96,14 +96,14 @@ with st.sidebar:
         "Claude model",
         MODELS,
         index=MODELS.index(_env_model) if _env_model in MODELS else 0,
-        help="UI only -- the CLI defaults to claude-opus-5. Cheaper models are fine for a demo.",
+        help="The CLI defaults to claude-opus-5. Cheaper models are fine for a demo.",
     )
     os.environ["ANTHROPIC_MODEL"] = model
 
     has_anthropic = bool(os.environ.get("ANTHROPIC_API_KEY"))
     has_openai = bool(os.environ.get("OPENAI_API_KEY"))
-    st.write(f"Anthropic key: {'✅' if has_anthropic else '❌'}")
-    st.write(f"OpenAI key: {'✅' if has_openai else '❌'}  \n<small>(embeddings, RAG only)</small>", unsafe_allow_html=True)
+    st.write(f"Anthropic key: {'Connected' if has_anthropic else 'Not Connected'}")
+    st.write(f"OpenAI key: {'Connected' if has_openai else 'Not Connected'}  \n<small>(embeddings, RAG only)</small>", unsafe_allow_html=True)
     if st.button("Clear chat"):
         st.session_state.messages = []
 
