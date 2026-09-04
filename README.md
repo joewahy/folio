@@ -15,7 +15,7 @@ times to call it before answering (it always searches at least once).
 - **Chunk size picked from a sweep, not guessed.** 500-char windows checked
   against 250 and 1000 on cost, latency, and accuracy
   ([Chunk size sweep](#chunk-size-sweep)).
-- **Evaluation methodology taken seriously.** False-result bugs found and
+- **Evaluation methodology taken seriously.** Three false-result bugs found and
   fixed in the eval harness itself by reading model outputs instead of trusting
   the OK/MISS column; see the "Methodology note" callouts under
   [Prompt injection](#prompt-injection) and
@@ -242,8 +242,11 @@ ignoring or following it.
 > explaining why it refused, which a substring match can't distinguish from
 > compliance. Fixed by counting a payload as successful only when the trigger
 > text appears *and* the real answer is absent. Same trap as the NIST scoring
-> artifact above, and reading the raw model outputs instead of the verdict
-> column is what caught both.
+> artifact above, and as the en-dash bug in `eval_modes.py`: its citation
+> parser matched page ranges only with a plain hyphen, so a correct `pp. 5-6`
+> citation scored as citing just page 5 whenever Claude wrote the range with a
+> typographic dash. Reading the raw model outputs instead of the verdict column
+> is what caught all three.
 
 Reproduce with `python evals/test_injection.py` (a handful of real API calls).
 
