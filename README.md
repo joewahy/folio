@@ -132,6 +132,10 @@ retrieve -> cite pipeline:
 
 ## RAG vs. stuff mode
 
+<details>
+<summary><b>RAG used ~4.6x fewer tokens than pasting the whole PDF into context (14x on the 76-page NIST doc), at equal citation accuracy: 35/40 vs 33/40.</b></summary>
+<br>
+
 `stuff.py` exists to answer a concrete question: is the retrieval step actually
 worth its complexity, or would just pasting the whole document into context do
 just as well? `evals/eval_modes.py` runs both modes over all 40 questions.
@@ -182,7 +186,13 @@ Reproduce with `ANTHROPIC_MODEL=claude-haiku-4-5 python evals/eval_modes.py`
 (needs `.env` set up; makes real API calls, so it costs a small amount to run,
 mostly the NIST doc in stuff mode).
 
+</details>
+
 ## Chunk size sweep
+
+<details>
+<summary><b>500-char chunks vs 250 and 1000: citation accuracy barely moves (36-37/40); 1000 costs ~10% more tokens, 250 makes more API calls. 500 stays the default.</b></summary>
+<br>
 
 `chunking.py` defaults to 500-character chunks with 100-character overlap.
 `evals/eval_chunk_sizes.py` checks whether that's a good default by running RAG
@@ -217,7 +227,13 @@ Reproduce with
 caveat as above, roughly 3x the spend since it repeats the sweep across three
 sizes).
 
+</details>
+
 ## Prompt injection
+
+<details>
+<summary><b>Both modes resisted all three poisoned-PDF payloads (blunt override, citation-poisoning, system-prompt exfiltration), staying correct and flagging the injection attempt.</b></summary>
+<br>
 
 Once a PDF's text sits in Claude's context, that content is untrusted input.
 `evals/test_injection.py` builds small poisoned PDFs (payload text embedded
@@ -250,7 +266,13 @@ ignoring or following it.
 
 Reproduce with `python evals/test_injection.py` (a handful of real API calls).
 
+</details>
+
 ## Messier documents
+
+<details>
+<summary><b>Multi-column extraction held up (correct column order, right citations); scanned / image-only PDFs surfaced a real crash, now fixed to fail with a clear error.</b></summary>
+<br>
 
 The corpus above spans four document shapes, but all four are born-digital PDFs
 with a clean text layer. `evals/test_messy_pdfs.py` builds two synthetic PDFs
@@ -279,7 +301,13 @@ one column got the right answer, correctly cited, in both modes.
 Reproduce with `python evals/test_messy_pdfs.py` (small real cost, for the
 multi-column half only; the scanned half now fails fast with no API call).
 
+</details>
+
 ## Abstention and fallback behavior
+
+<details>
+<summary><b>Both modes abstain when the PDF lacks the answer, though RAG still volunteers an unsourced answer; agent.py's fallback prompt fires correctly when the search budget is exhausted.</b></summary>
+<br>
 
 Two prompt behaviors that were previously just reasoned about, never checked
 against real output: what happens when the document doesn't contain the answer,
@@ -306,3 +334,5 @@ the user the search was cut short.
 
 Reproduce with `python evals/test_abstention_and_fallback.py` (a handful of
 real API calls).
+
+</details>
