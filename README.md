@@ -26,6 +26,8 @@ times to call it before answering (it always searches at least once).
 ## Setup
 
 ```bash
+git clone https://github.com/joewahy/pdf-questions.git
+cd pdf-questions
 pip install -e .
 cp .env.example .env
 ```
