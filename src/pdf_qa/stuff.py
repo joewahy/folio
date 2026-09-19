@@ -22,8 +22,26 @@ def ask(question: str, pages: list[Page]) -> str:
     page_text = "Reference Material: "
     for page in pages:
         page_text += f"[p. {page.number}]\n{page.text}\n\n"
-    page_text += f"\nQuestion: {question}"
-    messages: list[dict] = [{"role": "user", "content": page_text}]
+
+    # The reference material is its own content block with a cache
+    # breakpoint, separate from the question. cache_control caches
+    # everything up to and including the marked block (system prompt +
+    # this block), so repeated questions in the same session reuse that
+    # cached prefix instead of re-billing the whole PDF as input tokens
+    # every time -- only the trailing question block is fresh per call.
+    messages: list[dict] = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": page_text,
+                    "cache_control": {"type": "ephemeral"},
+                },
+                {"type": "text", "text": f"Question: {question}"},
+            ],
+        }
+    ]
 
     response = call_llm(messages, system=SYSTEM_PROMPT)
     return extract_text(response)

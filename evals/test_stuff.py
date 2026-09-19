@@ -15,9 +15,11 @@ where the message-role and ordering bugs upstream lived.
 Checks:
 - exactly one message, role "user" (no accidental multi-turn/assistant
   content)
-- both fake pages' text and "[p. N]" markers show up
-- the question comes AFTER the reference material in the built string
-  (matches stuff.py's documented ordering: material first, question last)
+- content is two blocks: reference material (cached) then question
+  (uncached) -- matches stuff.py's documented ordering: material first,
+  question last, with a cache breakpoint on the material only
+- both fake pages' text and "[p. N]" markers show up in the reference block
+- the question text shows up in the question block, not the reference block
 - page 1's text and page 2's "[p. 2]" marker aren't glued together with
   no whitespace between them
 
@@ -73,36 +75,52 @@ def check_message_shape(messages, question, pages):
 
         content = msg["content"]
 
-        for page in pages:
-            marker = f"[p. {page.number}]"
-            if marker not in content:
-                print(f"FAIL: missing page marker {marker!r}")
+        if len(content) != 2:
+            print(f"FAIL: expected 2 content blocks, got {len(content)}")
+            ok = False
+            content = None
+
+        if content is not None:
+            material, question_block = content[0], content[1]
+
+            if material.get("cache_control") != {"type": "ephemeral"}:
+                print("FAIL: reference material block missing cache_control")
                 ok = False
-            if page.text not in content:
-                print(f"FAIL: missing text for page {page.number}")
+            if "cache_control" in question_block:
+                print("FAIL: question block should not be cached (it changes every call)")
                 ok = False
 
-        question_idx = content.find(question)
-        last_marker_idx = content.rfind(f"[p. {pages[-1].number}]")
-        if question_idx == -1:
-            print("FAIL: question text not found in content")
-            ok = False
-        elif question_idx < last_marker_idx:
-            print("FAIL: question appears before reference material, not after")
-            ok = False
+            material_text = material["text"]
+            question_text = question_block["text"]
 
-        page1_end = content.find(pages[0].text) + len(pages[0].text)
-        page2_marker = content.find(f"[p. {pages[1].number}]")
-        if page2_marker != -1 and page2_marker > page1_end:
-            gap = content[page1_end:page2_marker]
-            if not gap.strip("\n"):
-                pass  # only whitespace between pages -- good
-            else:
-                print(f"FAIL: unexpected non-whitespace between pages: {gap!r}")
+            for page in pages:
+                marker = f"[p. {page.number}]"
+                if marker not in material_text:
+                    print(f"FAIL: missing page marker {marker!r}")
+                    ok = False
+                if page.text not in material_text:
+                    print(f"FAIL: missing text for page {page.number}")
+                    ok = False
+
+            if question not in question_text:
+                print("FAIL: question text not found in question block")
                 ok = False
-        elif page2_marker != -1 and content[page1_end:page2_marker] == "":
-            print("FAIL: page 1 text and page 2 marker are glued together with no separator")
-            ok = False
+            if question in material_text:
+                print("FAIL: question leaked into the cached reference-material block")
+                ok = False
+
+            page1_end = material_text.find(pages[0].text) + len(pages[0].text)
+            page2_marker = material_text.find(f"[p. {pages[1].number}]")
+            if page2_marker != -1 and page2_marker > page1_end:
+                gap = material_text[page1_end:page2_marker]
+                if not gap.strip("\n"):
+                    pass  # only whitespace between pages -- good
+                else:
+                    print(f"FAIL: unexpected non-whitespace between pages: {gap!r}")
+                    ok = False
+            elif page2_marker != -1 and material_text[page1_end:page2_marker] == "":
+                print("FAIL: page 1 text and page 2 marker are glued together with no separator")
+                ok = False
 
     if ok:
         print("PASS: message shape looks right.")
