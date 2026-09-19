@@ -187,26 +187,40 @@ carrying only its `[p. N]` marker, stripped of the surrounding page furniture.
 > against.
 
 Reproduce with `ANTHROPIC_MODEL=claude-haiku-4-5 python evals/eval_modes.py`
-(needs `.env` set up; makes real API calls, so it costs a small amount to run,
-mostly the NIST doc in stuff mode).
+(needs `.env` set up; makes real API calls across all three conditions the
+script now runs -- RAG, stuff uncached, stuff cached -- so it costs somewhat
+more than when this table was first measured with just RAG and stuff. The RAG
+and stuff-uncached numbers reproduce the table above; the stuff-cached pass
+feeds [Prompt caching](#prompt-caching) below).
 
-> **Note: the table above predates prompt caching.** `stuff.py` now sends the
-> document text as its own `cache_control`-marked block, and `eval_modes.py`
-> runs three conditions (RAG, stuff uncached, stuff cached) to compare them.
-> The table above is still the uncached figure; see below for what caching
-> actually changes.
+</details>
 
-**Partial result: caching flips the small-document story.** A run on the
-two small documents (`notes_primer`, `thermostat_manual`) with
-`claude-sonnet-5` -- not the `claude-haiku-4-5` the table above uses, so
-absolute numbers aren't directly comparable -- turned the projected estimate
-into a real one:
+## Prompt caching
 
-| Mode | Input tok | Cache write | Cache read | Output tok | Cost |
+<details>
+<summary><b>Caching the reference-material block flips stuff mode's cost story on small documents: ~2.8x cheaper than RAG, not just competitive with it.</b></summary>
+<br>
+
+`stuff.py` sends the reference material as its own content block marked
+`cache_control: {"type": "ephemeral"}`, so repeated questions in one session
+reuse the cached prefix instead of re-billing the whole PDF as input tokens
+every time. `evals/eval_modes.py` runs RAG, stuff (uncached), and stuff
+(cached) as three separate conditions so the effect can be measured instead
+of assumed -- the [RAG vs. stuff mode](#rag-vs-stuff-mode) table above
+predates this change and is still the uncached figure.
+
+**Partial result** (see caveats below): a run on the two small documents
+(`notes_primer`, `thermostat_manual`) with `claude-sonnet-5`:
+
+| Mode | Input tok | Cache write | Cache read | Output tok | Cost* |
 |---|---|---|---|---|---|
 | RAG | 43.9k | -- | -- | 4.2k | $0.130 |
 | Stuff (uncached) | 56.4k | -- | -- | 2.1k | $0.134 |
 | Stuff (cached) | 0.5k | 5.6k | 50.3k | 2.2k | **$0.047** |
+
+<sub>*Sonnet 5 pricing: $2/$10 per MTok input/output; cache write ≈1.25x the
+input rate, cache read ≈0.1x the input rate (Anthropic's published prompt
+caching multipliers -- check current rates before trusting this exactly).</sub>
 
 Cached stuff mode came out **~2.8x cheaper than RAG**, not just competitive
 with it -- because RAG pays a fairly fixed "extra round trip + tool schema"
@@ -216,7 +230,7 @@ matched the initial `cache_write` size exactly on every repeat question, no
 partial hits.
 
 This isn't the full picture, and shouldn't be read as overturning the
-headline claim above. Caveats:
+[RAG vs. stuff mode](#rag-vs-stuff-mode) headline claim above. Caveats:
 - **Only 2 of 4 documents** -- it excludes the 76-page NIST doc, which is
   where RAG's actual size-scaling advantage lives (see "the gap is the whole
   story" above); caching should narrow that gap, not erase it.
@@ -226,13 +240,14 @@ headline claim above. Caveats:
 - **Scoped, not the full corpus.** The numbers above came from a scoped run
   of the same real `eval_modes.py` logic (`EVAL_DOCS=notes_primer,
   thermostat_manual`) over just these two documents, not all four -- a real
-  but partial result, with less coverage than the measured table above, not
-  a preview of a run that's still to come.
+  but partial result, with less coverage than the RAG-vs-stuff table above,
+  not a preview of a run that's still to come.
 
-**Reproduce it yourself:**
+Reproduce with:
 
 ```bash
-# Full corpus, all 4 documents, all 3 conditions -- the real measured claim
+# Full corpus, all 4 documents, all 3 conditions -- same command that backs
+# the RAG-vs-stuff table above, now also producing the cached-stuff numbers
 ANTHROPIC_MODEL=claude-haiku-4-5 python evals/eval_modes.py
 
 # Cheaper spot check first: just the 2 small documents (skips the
