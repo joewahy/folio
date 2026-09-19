@@ -1,7 +1,7 @@
 """Eval script: exercise stuff.ask()'s message-building without hitting
 the Claude API.
 
-Not part of the pdf_qa package -- a standalone script, not pytest-
+Not part of the folio package -- a standalone script, not pytest-
 discoverable. Tracked (unlike scratch/, which is gitignored) as the
 mocked-structure test backing stuff.py.
 
@@ -34,8 +34,8 @@ Checks:
 Once this passes, run a real check against scratch/sample.pdf, e.g.:
     python -c "
     from dotenv import load_dotenv; load_dotenv()
-    from pdf_qa.extraction import extract_pages
-    from pdf_qa.stuff import ask
+    from folio.extraction import extract_pages
+    from folio.stuff import ask
     pages = extract_pages('scratch/sample.pdf')
     print(ask('<a question you know the answer to>', pages))
     "
@@ -46,8 +46,8 @@ Usage:
 
 from types import SimpleNamespace
 
-import pdf_qa.stuff as stuff
-from pdf_qa.extraction import Page
+import folio.stuff as stuff
+from folio.extraction import Page
 
 
 def fake_end_turn_response():

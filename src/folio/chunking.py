@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pdf_qa.extraction import Page
+from folio.extraction import Page
 
 
 @dataclass

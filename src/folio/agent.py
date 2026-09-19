@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from pdf_qa import search
-from pdf_qa.chunking import Chunk
-from pdf_qa.llm import call_llm
+from folio import search
+from folio.chunking import Chunk
+from folio.llm import call_llm
 
 # Hard cap on tool-call round trips for a single question. Without one, a
 # model that keeps deciding to search never terminates the loop -- a real

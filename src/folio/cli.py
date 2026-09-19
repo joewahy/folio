@@ -1,4 +1,4 @@
-"""CLI entry point: `pdf-qa <path-to-pdf>` extracts the PDF, builds a
+"""CLI entry point: `folio <path-to-pdf>` extracts the PDF, builds a
 search index, and drops you into a Q&A loop -- or, with `--mode stuff`,
 skips the index entirely and stuffs the whole document into context
 instead (see stuff.py).
@@ -11,7 +11,7 @@ import argparse
 import numpy as np
 from dotenv import load_dotenv
 
-from pdf_qa import agent, chunking, embeddings, extraction, stuff
+from folio import agent, chunking, embeddings, extraction, stuff
 
 
 def build_index(pdf_path: str) -> tuple[list, np.ndarray]:
@@ -37,7 +37,7 @@ def build_index(pdf_path: str) -> tuple[list, np.ndarray]:
         # actually explains what's wrong.
         raise ValueError(
             f"No extractable text found in {pdf_path!r}. This is likely a "
-            "scanned or image-only PDF -- pdf-qa reads text directly from "
+            "scanned or image-only PDF -- folio reads text directly from "
             "the PDF and does not do OCR."
         )
     vectors = np.array(embeddings.embed_texts([chunk.text for chunk in chunks]))

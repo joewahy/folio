@@ -3,7 +3,7 @@
 across the 40-question corpus (evals/corpus.py) -- four documents of
 different shape, ten hand-labeled questions each.
 
-Not part of the pdf_qa package -- a standalone script, not pytest-
+Not part of the folio package -- a standalone script, not pytest-
 discoverable. Tracked (unlike scratch/, which is gitignored) because
 this is what the README's RAG-vs-stuff numbers actually come from.
 
@@ -48,11 +48,11 @@ import time
 from corpus import DOCUMENTS, require_pdfs
 from dotenv import load_dotenv
 
-import pdf_qa.agent as agent
-import pdf_qa.stuff as stuff
-from pdf_qa.cli import build_index
-from pdf_qa.extraction import extract_pages
-from pdf_qa.llm import call_llm as real_call_llm
+import folio.agent as agent
+import folio.stuff as stuff
+from folio.cli import build_index
+from folio.extraction import extract_pages
+from folio.llm import call_llm as real_call_llm
 
 # Claude sometimes writes ranges with a typographic en/em dash ("p. 5-6")
 # rather than a plain hyphen -- matters, since matching only "-" silently

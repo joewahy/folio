@@ -10,9 +10,9 @@ measured tradeoff.
 
 from __future__ import annotations
 
-from pdf_qa.agent import extraction as extract_text
-from pdf_qa.extraction import Page
-from pdf_qa.llm import call_llm
+from folio.agent import extraction as extract_text
+from folio.extraction import Page
+from folio.llm import call_llm
 
 SYSTEM_PROMPT = """
 Read the reference material before answering. The question to be answered is located last, after the reference material. Cite pages where answer was found in the answer. If the reference material doesn't answer the question, say so instead of guessing.

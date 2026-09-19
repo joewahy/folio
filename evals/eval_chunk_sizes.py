@@ -2,7 +2,7 @@
 against the 40-question corpus (evals/corpus.py), to see whether chunk
 size actually moves RAG citation accuracy, cost, or latency.
 
-Not part of the pdf_qa package -- a standalone script, not pytest-
+Not part of the folio package -- a standalone script, not pytest-
 discoverable. Tracked (unlike scratch/, which is gitignored) because
 this is what the README's chunk-size numbers actually come from.
 
@@ -43,10 +43,10 @@ from eval_modes import (
     summary_line,
 )
 
-import pdf_qa.agent as agent
-from pdf_qa import embeddings
-from pdf_qa.chunking import Chunk
-from pdf_qa.extraction import Page, extract_pages
+import folio.agent as agent
+from folio import embeddings
+from folio.chunking import Chunk
+from folio.extraction import Page, extract_pages
 
 SIZES = [250, 500, 1000]
 OVERLAP = 100  # held fixed -- only `size` is swept

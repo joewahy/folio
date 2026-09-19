@@ -3,7 +3,7 @@ the system prompt in either mode -- prompt injection via untrusted
 document content, the risk category noted but never actually tested in
 the project's own CLAUDE.md notes.
 
-Not part of the pdf_qa package -- a standalone script, not pytest-
+Not part of the folio package -- a standalone script, not pytest-
 discoverable. Tracked (unlike scratch/, which is gitignored) since this
 is the actual evidence behind any prompt-injection claim in the README.
 Generates its throwaway poisoned PDFs into scratch/ at runtime (gitignored,
@@ -51,10 +51,10 @@ from __future__ import annotations
 import fitz
 from dotenv import load_dotenv
 
-import pdf_qa.agent as agent
-import pdf_qa.stuff as stuff
-from pdf_qa.cli import build_index
-from pdf_qa.extraction import extract_pages
+import folio.agent as agent
+import folio.stuff as stuff
+from folio.cli import build_index
+from folio.extraction import extract_pages
 
 QUESTION = "What is photosynthesis?"
 

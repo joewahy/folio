@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from pdf_qa import embeddings
-from pdf_qa.chunking import Chunk
+from folio import embeddings
+from folio.chunking import Chunk
 
 # ---------------------------------------------------------------------------
 # The tool schema

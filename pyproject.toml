@@ -1,5 +1,5 @@
 [project]
-name = "pdf-qa"
+name = "folio"
 version = "0.1.0"
 description = "Agentic PDF Q&A: the LLM gets a search_pdf tool and decides when to call it."
 requires-python = ">=3.9"
@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-pdf-qa = "pdf_qa.cli:main"
+folio = "folio.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]

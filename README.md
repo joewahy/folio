@@ -1,4 +1,4 @@
-# pdf-qa
+# Folio
 
 Ask questions about a PDF. Instead of the usual fixed retrieve-then-generate
 pipeline, Claude gets a `search_pdf` tool and decides for itself how many
@@ -28,8 +28,8 @@ to be safe).
 ## Setup
 
 ```bash
-git clone https://github.com/joewahy/pdf-questions.git
-cd pdf-questions
+git clone https://github.com/joewahy/folio.git
+cd folio
 pip install -e .
 cp .env.example .env
 ```
@@ -39,8 +39,8 @@ Fill in `.env` with an [Anthropic API key](https://console.anthropic.com/setting
 ## Usage
 
 ```bash
-pdf-qa path/to/your.pdf              # RAG mode (default): search over chunks
-pdf-qa path/to/your.pdf --mode stuff # whole PDF in context, no retrieval
+folio path/to/your.pdf              # RAG mode (default): search over chunks
+folio path/to/your.pdf --mode stuff # whole PDF in context, no retrieval
 ```
 
 Drops you into a `>` prompt. Ask questions, `Ctrl+D` to quit.
@@ -61,7 +61,7 @@ Drops you into a `>` prompt. Ask questions, `Ctrl+D` to quit.
 ## Project layout
 
 ```
-src/pdf_qa/
+src/folio/
 ├── extraction.py   PDF -> per-page text (PyMuPDF)
 ├── chunking.py     page text -> overlapping chunks
 ├── embeddings.py   OpenAI embedding wrapper
@@ -71,7 +71,7 @@ src/pdf_qa/
 ├── stuff.py        whole-PDF-in-context mode: no retrieval, no chunking, no embeddings;
 │                    caches the document text (`cache_control`) so repeat questions in one
 │                    session don't re-bill the whole PDF as input tokens
-└── cli.py          `pdf-qa <pdf>` entry point (--mode rag | stuff)
+└── cli.py          `folio <pdf>` entry point (--mode rag | stuff)
 
 evals/
 ├── corpus.py            the 40-question set: 4 documents x 10 questions, each labeled with its answer page(s)
@@ -367,7 +367,7 @@ modes.
   layer, and `chunking.py` correctly skips empty-text pages.
 - But `cli.py`'s `build_index()` then handed that empty chunk list straight
   to `embeddings.embed_texts([])`, which OpenAI's API rejects with a raw
-  `400 BadRequestError`, so `pdf-qa` on a fully-scanned PDF just crashed
+  `400 BadRequestError`, so `folio` on a fully-scanned PDF just crashed
   with an unhandled API error instead of anything useful.
 - Fixed with a guard in `build_index()` that raises
   `ValueError("No extractable text found ...")` before the embeddings call.

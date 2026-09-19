@@ -1,7 +1,7 @@
 """Eval script: exercise agent.ask()'s tool-call handling without
 hitting the Claude or OpenAI APIs.
 
-Not part of the pdf_qa package -- a standalone script, not pytest-
+Not part of the folio package -- a standalone script, not pytest-
 discoverable. Tracked (unlike scratch/, which is gitignored) as the
 mocked-structure test backing agent.py's tool-use loop.
 
@@ -31,7 +31,7 @@ Usage:
 
 from types import SimpleNamespace
 
-import pdf_qa.agent as agent
+import folio.agent as agent
 
 
 def fake_tool_use_response():

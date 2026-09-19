@@ -4,7 +4,7 @@ layout -- to see whether extraction/chunking/embedding hold up on
 anything other than the one clean, well-structured sample.pdf every
 other eval in this repo uses.
 
-Not part of the pdf_qa package -- a standalone script, not pytest-
+Not part of the folio package -- a standalone script, not pytest-
 discoverable. Tracked in evals/ since this is the evidence behind
 whatever "tested on messier documents" claim goes in the README.
 
@@ -45,10 +45,10 @@ from __future__ import annotations
 import fitz
 from dotenv import load_dotenv
 
-import pdf_qa.agent as agent
-import pdf_qa.stuff as stuff
-from pdf_qa.cli import build_index
-from pdf_qa.extraction import extract_pages
+import folio.agent as agent
+import folio.stuff as stuff
+from folio.cli import build_index
+from folio.extraction import extract_pages
 
 
 def make_scanned_pdf(path: str, text: str) -> None:
