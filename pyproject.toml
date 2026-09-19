@@ -11,9 +11,6 @@ dependencies = [
     "python-dotenv>=1.0",
 ]
 
-[project.optional-dependencies]
-ui = ["streamlit>=1.38"]
-
 [project.scripts]
 pdf-qa = "pdf_qa.cli:main"
 
