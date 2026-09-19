@@ -1,20 +1,24 @@
 """Eval script: compare RAG mode (agent.ask) against stuff mode
-(stuff.ask) on cost, latency, and citation accuracy across the 40-
-question corpus (evals/corpus.py) -- four documents of different shape,
-ten hand-labeled questions each.
+(stuff.ask), cached and uncached, on cost, latency, and citation accuracy
+across the 40-question corpus (evals/corpus.py) -- four documents of
+different shape, ten hand-labeled questions each.
 
 Not part of the pdf_qa package -- a standalone script, not pytest-
 discoverable. Tracked (unlike scratch/, which is gitignored) because
 this is what the README's RAG-vs-stuff numbers actually come from.
 
 Costs real money: it builds a RAG index (OpenAI embeddings) for each of
-the four PDFs once, then runs every question through both modes for real
+the four PDFs once, then runs every question through three modes for real
 against the Claude API -- nothing here is mocked. RAG mode can make
-several call_llm round trips per question (the tool-use loop), and stuff
-mode resends the whole document every question, so the 76-page NIST PDF
-in particular is token-heavy in stuff mode. Set
-ANTHROPIC_MODEL=claude-haiku-4-5 (or claude-sonnet-5) in .env before
-running -- llm.py defaults to claude-opus-5, overkill for an eval loop.
+several call_llm round trips per question (the tool-use loop); stuff mode
+resends the whole document every question, so the 76-page NIST PDF in
+particular is token-heavy in stuff mode -- run twice, once with
+stuff.ask(cache=False) as the uncached baseline and once with
+cache=True, since the ten questions per document run back-to-back
+(within the cache's 5-minute TTL), which is exactly the pattern
+cache_control benefits from. Set ANTHROPIC_MODEL=claude-haiku-4-5 (or
+claude-sonnet-5) in .env before running -- llm.py defaults to
+claude-opus-5, overkill for an eval loop.
 
 "Accuracy" here is a cheap heuristic, not a rigorous grader: did any of
 a question's labeled pages show up in the answer's citations, in "p. N"/
@@ -60,7 +64,14 @@ def cited_pages(answer: str) -> set[int]:
 
 
 def new_stats() -> dict:
-    return {"calls": 0, "input_tokens": 0, "output_tokens": 0, "elapsed": 0.0}
+    return {
+        "calls": 0,
+        "input_tokens": 0,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 0,
+        "output_tokens": 0,
+        "elapsed": 0.0,
+    }
 
 
 def make_tracking_call_llm(stats: dict):
@@ -69,7 +80,13 @@ def make_tracking_call_llm(stats: dict):
         response = real_call_llm(messages, **kwargs)
         stats["elapsed"] += time.perf_counter() - start
         stats["calls"] += 1
+        # cache_creation/cache_read tokens are billed at different rates than
+        # a plain input token (~1.25x and ~0.1x respectively) and the API
+        # reports them separately from input_tokens -- lumping them together
+        # would hide exactly what a cached vs. uncached comparison needs to see.
         stats["input_tokens"] += response.usage.input_tokens
+        stats["cache_write_tokens"] += response.usage.cache_creation_input_tokens
+        stats["cache_read_tokens"] += response.usage.cache_read_input_tokens
         stats["output_tokens"] += response.usage.output_tokens
         return response
 
@@ -84,7 +101,9 @@ def add_into(totals: dict, stats: dict) -> None:
 def summary_line(label: str, hits: int, asked: int, totals: dict) -> str:
     return (
         f"{label}: {hits}/{asked} correctly cited. "
-        f"{totals['calls']} calls, {totals['input_tokens']} in / "
+        f"{totals['calls']} calls, {totals['input_tokens']} in "
+        f"(+{totals['cache_write_tokens']} cache write / "
+        f"{totals['cache_read_tokens']} cache read) / "
         f"{totals['output_tokens']} out tokens, {totals['elapsed']:.1f}s"
     )
 
@@ -115,7 +134,9 @@ def run_mode(name: str, ask_for) -> None:
             want = ",".join(str(p) for p in sorted(expected_pages))
             print(
                 f"[{'OK  ' if ok else 'MISS'}] want p.{want:<6} "
-                f"{stats['calls']} call(s), {stats['input_tokens']:>7}in/{stats['output_tokens']:>4}out tok, "
+                f"{stats['calls']} call(s), {stats['input_tokens']:>7}in "
+                f"(+{stats['cache_write_tokens']:>6}cw/{stats['cache_read_tokens']:>6}cr)"
+                f"/{stats['output_tokens']:>4}out tok, "
                 f"{stats['elapsed']:5.1f}s -- {question}"
             )
             # Print the answer too: OK/MISS is a substring heuristic and has
@@ -148,6 +169,10 @@ if __name__ == "__main__":
         lambda doc: (lambda q: agent.ask(q, *indexes[doc.name])),
     )
     run_mode(
-        "STUFF",
-        lambda doc: (lambda q: stuff.ask(q, pages[doc.name])),
+        "STUFF (uncached)",
+        lambda doc: (lambda q: stuff.ask(q, pages[doc.name], cache=False)),
+    )
+    run_mode(
+        "STUFF (cached)",
+        lambda doc: (lambda q: stuff.ask(q, pages[doc.name], cache=True)),
     )
