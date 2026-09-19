@@ -82,14 +82,16 @@ src/pdf_qa/
 ├── search.py       search_pdf tool: cosine similarity over chunk embeddings
 ├── llm.py          Claude Messages API wrapper
 ├── agent.py        the tool-use loop -- decides when to search, builds the final answer
-├── stuff.py        whole-PDF-in-context mode: no retrieval, no chunking, no embeddings
+├── stuff.py        whole-PDF-in-context mode: no retrieval, no chunking, no embeddings;
+│                    caches the document text (`cache_control`) so repeat questions in one
+│                    session don't re-bill the whole PDF as input tokens
 └── cli.py          `pdf-qa <pdf>` entry point (--mode rag | stuff)
 
 evals/
 ├── corpus.py            the 40-question set: 4 documents x 10 questions, each labeled with its answer page(s)
 ├── corpus/              the 4 eval PDFs, build_corpus.py that regenerates 3 of them, and SOURCES.md
 ├── test_agent.py        mocked test: agent.py's tool-use loop, incl. the fallback path
-├── test_stuff.py        mocked test: stuff.py's message-building
+├── test_stuff.py        mocked test: stuff.py's message-building, incl. the cache_control breakpoint
 ├── eval_modes.py        real-API: RAG vs. stuff over the corpus, cost/latency/accuracy (see below)
 ├── eval_chunk_sizes.py  real-API: chunk-size sweep over the corpus (see below)
 ├── test_injection.py    real-API: prompt-injection resistance via poisoned PDFs
@@ -187,6 +189,14 @@ carrying only its `[p. N]` marker, stripped of the surrounding page furniture.
 Reproduce with `ANTHROPIC_MODEL=claude-haiku-4-5 python evals/eval_modes.py`
 (needs `.env` set up; makes real API calls, so it costs a small amount to run,
 mostly the NIST doc in stuff mode).
+
+> **Note: the table above predates prompt caching.** `stuff.py` now sends the
+> document text as its own `cache_control`-marked block. `eval_modes.py` asks
+> all 10 questions per document back-to-back with the same reference-material
+> block each time, exactly the pattern that hits the cache, so re-running the
+> eval now should shrink stuff mode's token/cost numbers noticeably (cached
+> reads are billed well below full input-token price). Not re-measured yet --
+> the table above still reflects the uncached cost.
 
 </details>
 
