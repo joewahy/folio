@@ -27,12 +27,21 @@ the wrong page or no page at all, but says nothing about whether the
 prose itself is correct -- read the printed answers, don't just trust
 the OK/MISS column.
 
+Set EVAL_DOCS to a comma-separated subset of document names (see
+corpus.py's DOCUMENTS for the four names) to run a cheaper sanity check
+before paying for the full corpus -- e.g. the two small synthetic docs
+instead of all four. Results from a scoped run aren't the measured
+numbers this README quotes (those come from the full corpus, unscoped);
+it's for spot-checking a change cheaply before committing to the real run.
+
 Usage:
     python evals/eval_modes.py
+    EVAL_DOCS=notes_primer,thermostat_manual python evals/eval_modes.py
 """
 
 from __future__ import annotations
 
+import os
 import re
 import time
 
@@ -156,6 +165,17 @@ if __name__ == "__main__":
     load_dotenv()
     require_pdfs()
 
+    doc_filter = os.environ.get("EVAL_DOCS")
+    if doc_filter:
+        wanted = {name.strip() for name in doc_filter.split(",")}
+        unknown = wanted - {d.name for d in DOCUMENTS}
+        if unknown:
+            raise ValueError(
+                f"EVAL_DOCS names not in corpus.DOCUMENTS: {sorted(unknown)}"
+            )
+        DOCUMENTS = [d for d in DOCUMENTS if d.name in wanted]
+
+    print(f"Documents: {[d.name for d in DOCUMENTS]}")
     print("Building RAG indexes (OpenAI embeddings, once per document)...")
     indexes = {}
     pages = {}

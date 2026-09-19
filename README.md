@@ -191,12 +191,62 @@ Reproduce with `ANTHROPIC_MODEL=claude-haiku-4-5 python evals/eval_modes.py`
 mostly the NIST doc in stuff mode).
 
 > **Note: the table above predates prompt caching.** `stuff.py` now sends the
-> document text as its own `cache_control`-marked block. `eval_modes.py` asks
-> all 10 questions per document back-to-back with the same reference-material
-> block each time, exactly the pattern that hits the cache, so re-running the
-> eval now should shrink stuff mode's token/cost numbers noticeably (cached
-> reads are billed well below full input-token price). Not re-measured yet --
-> the table above still reflects the uncached cost.
+> document text as its own `cache_control`-marked block, and `eval_modes.py`
+> runs three conditions (RAG, stuff uncached, stuff cached) to compare them.
+> The table above is still the uncached figure; see below for what caching
+> actually changes.
+
+**Preliminary: caching flips the small-document story.** A partial run on the
+two small documents (`notes_primer`, `thermostat_manual`) with
+`claude-sonnet-5` -- not the `claude-haiku-4-5` the table above uses, so
+absolute numbers aren't directly comparable -- turned the projected estimate
+into a real one:
+
+| Mode | Input tok | Cache write | Cache read | Output tok | Cost |
+|---|---|---|---|---|---|
+| RAG | 43.9k | -- | -- | 4.2k | $0.130 |
+| Stuff (uncached) | 56.4k | -- | -- | 2.1k | $0.134 |
+| Stuff (cached) | 0.5k | 5.6k | 50.3k | 2.2k | **$0.047** |
+
+Cached stuff mode came out **~2.8x cheaper than RAG**, not just competitive
+with it -- because RAG pays a fairly fixed "extra round trip + tool schema"
+tax per question (2 calls per question here) that caching has no equivalent
+of once the document is cached. Cache hits were 100%: `cache_read_input_tokens`
+matched the initial `cache_write` size exactly on every repeat question, no
+partial hits.
+
+This isn't the full picture, and shouldn't be read as overturning the
+headline claim above. Caveats:
+- **Only 2 of 4 documents** -- it excludes the 76-page NIST doc, which is
+  where RAG's actual size-scaling advantage lives (see "the gap is the whole
+  story" above); caching should narrow that gap, not erase it.
+- **Different model** (`claude-sonnet-5` vs. the `claude-haiku-4-5` baseline
+  used everywhere else in this doc), run as a quick, cheap sanity check
+  before committing to a full-corpus run.
+- **Originally a one-off, not (yet) the full run.** The numbers above came
+  from a scoped run of the same real `eval_modes.py` logic over just these
+  two documents -- treat it as a strong early signal, not a claim on the
+  same footing as the measured table above, until a full 4-document run
+  confirms or revises it.
+
+**Reproduce it yourself:**
+
+```bash
+# Full corpus, all 4 documents, all 3 conditions -- the real measured claim
+ANTHROPIC_MODEL=claude-haiku-4-5 python evals/eval_modes.py
+
+# Cheaper spot check first: just the 2 small documents (skips the
+# token-heavy NIST doc), any model
+ANTHROPIC_MODEL=claude-sonnet-5 EVAL_DOCS=notes_primer,thermostat_manual python evals/eval_modes.py
+```
+
+Needs `.env` set up with both API keys. `EVAL_DOCS` (a comma-separated
+subset of `notes_primer` / `thermostat_manual` / `apache_license_2.0` /
+`nist_sp800-63-3`) scopes `evals/eval_modes.py` down for exactly this kind
+of cheap sanity check before paying for the full run -- see the script's
+docstring. Each mode prints per-question token counts (including the
+cache-write/cache-read split) and a running total as it goes, so you don't
+have to wait for the end to see whether caching is actually hitting.
 
 </details>
 
