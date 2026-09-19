@@ -196,7 +196,7 @@ mostly the NIST doc in stuff mode).
 > The table above is still the uncached figure; see below for what caching
 > actually changes.
 
-**Preliminary: caching flips the small-document story.** A partial run on the
+**Partial result: caching flips the small-document story.** A run on the
 two small documents (`notes_primer`, `thermostat_manual`) with
 `claude-sonnet-5` -- not the `claude-haiku-4-5` the table above uses, so
 absolute numbers aren't directly comparable -- turned the projected estimate
@@ -221,13 +221,13 @@ headline claim above. Caveats:
   where RAG's actual size-scaling advantage lives (see "the gap is the whole
   story" above); caching should narrow that gap, not erase it.
 - **Different model** (`claude-sonnet-5` vs. the `claude-haiku-4-5` baseline
-  used everywhere else in this doc), run as a quick, cheap sanity check
-  before committing to a full-corpus run.
-- **Originally a one-off, not (yet) the full run.** The numbers above came
-  from a scoped run of the same real `eval_modes.py` logic over just these
-  two documents -- treat it as a strong early signal, not a claim on the
-  same footing as the measured table above, until a full 4-document run
-  confirms or revises it.
+  used everywhere else in this doc), run as a quick, cheap sanity check on a
+  deliberately small slice of the corpus.
+- **Scoped, not the full corpus.** The numbers above came from a scoped run
+  of the same real `eval_modes.py` logic (`EVAL_DOCS=notes_primer,
+  thermostat_manual`) over just these two documents, not all four -- a real
+  but partial result, with less coverage than the measured table above, not
+  a preview of a run that's still to come.
 
 **Reproduce it yourself:**
 
