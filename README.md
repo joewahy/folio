@@ -5,6 +5,15 @@ pipeline, Claude gets a `search_pdf` tool and decides for itself how many
 times to call it before answering (it always searches at least once, just
 to be safe).
 
+Folio has two modes, which the rest of this README compares:
+
+- **RAG mode** (default): the PDF is split into chunks and embedded. Claude
+  calls `search_pdf` to pull back only the chunks relevant to the question,
+  then answers from those.
+- **Stuff mode** (`--mode stuff`): no chunking, embeddings, or search. The
+  whole PDF's text is put into Claude's context ("stuffed" in) and Claude
+  answers from that directly.
+
 ## Highlights
 
 - **Agentic retrieval, not a fixed pipeline.** The LLM gets a `search_pdf`
